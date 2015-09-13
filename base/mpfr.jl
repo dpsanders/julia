@@ -50,10 +50,12 @@ type BigFloat <: AbstractFloat
     sign::Cint
     exp::Clong
     d::Ptr{Culong}
-    function BigFloat()
-        N = get_bigfloat_precision()
+    function BigFloat(; prec = -1)
+        # sentinel value -1: use current global precision
+        prec == -1 && prec = get_bigfloat_precision()
+
         z = new(zero(Clong), zero(Cint), zero(Clong), C_NULL)
-        ccall((:mpfr_init2,:libmpfr), Void, (Ptr{BigFloat}, Clong), &z, N)
+        ccall((:mpfr_init2,:libmpfr), Void, (Ptr{BigFloat}, Clong), &z, prec)
         finalizer(z, Base.GMP._mpfr_clear_func)
         return z
     end
@@ -63,6 +65,7 @@ type BigFloat <: AbstractFloat
     end
 end
 
+
 widen(::Type{Float64}) = BigFloat
 widen(::Type{BigFloat}) = BigFloat
 
@@ -71,27 +74,27 @@ convert(::Type{BigFloat}, x::BigFloat) = x
 # convert to BigFloat
 for (fJ, fC) in ((:si,:Clong), (:ui,:Culong), (:d,:Float64))
     @eval begin
-        function convert(::Type{BigFloat}, x::($fC))
-            z = BigFloat()
+        function BigFloat(x::($fC); prec=-1)
+            z = BigFloat(prec=prec)
             ccall(($(string(:mpfr_set_,fJ)), :libmpfr), Int32, (Ptr{BigFloat}, ($fC), Int32), &z, x, ROUNDING_MODE[end])
             return z
         end
     end
 end
 
-function convert(::Type{BigFloat}, x::BigInt)
-    z = BigFloat()
+function BigFloat(x::BigInt; prec=-1)
+    z = BigFloat(prec=prec)
     ccall((:mpfr_set_z, :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigInt}, Int32), &z, &x, ROUNDING_MODE[end])
     return z
 end
 
-convert(::Type{BigFloat}, x::Integer) = BigFloat(BigInt(x))
+BigFloat(x::Integer; prec=-1) = BigFloat(BigInt(x), prec=prec)
 
-convert(::Type{BigFloat}, x::Union{Bool,Int8,Int16,Int32}) = BigFloat(convert(Clong,x))
-convert(::Type{BigFloat}, x::Union{UInt8,UInt16,UInt32}) = BigFloat(convert(Culong,x))
+BigFloat(x::Union{Bool,Int8,Int16,Int32}, prec=-1) = BigFloat(convert(Clong,x), prec=prec)
+BigFloat(x::Union{UInt8,UInt16,UInt32}, prec=-1) = BigFloat(convert(Culong,x), prec=prec)
 
-convert(::Type{BigFloat}, x::Union{Float16,Float32}) = BigFloat(Float64(x))
-convert(::Type{BigFloat}, x::Rational) = BigFloat(num(x)) / BigFloat(den(x))
+BigFloat(x::Union{Float16,Float32}, prec=-1) = BigFloat(Float64(x), prec=prec)
+BigFloat(x::Rational, prec=-1) = BigFloat(num(x), prec) / BigFloat(den(x), prec=prec)
 
 function tryparse(::Type{BigFloat}, s::AbstractString, base::Int=0)
     z = BigFloat()
@@ -854,5 +857,7 @@ get_emin_max() = ccall((:mpfr_get_emin_max, :libmpfr), Clong, ())
 
 set_emax!(x) = ccall((:mpfr_set_emax, :libmpfr), Void, (Clong,), x)
 set_emin!(x) = ccall((:mpfr_set_emin, :libmpfr), Void, (Clong,), x)
+
+big(x; prec=-1) = BigFloat(x; prec=prec)
 
 end #module
