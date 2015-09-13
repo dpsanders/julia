@@ -21,7 +21,8 @@ import
         eps, signbit, sin, cos, tan, sec, csc, cot, acos, asin, atan,
         cosh, sinh, tanh, sech, csch, coth, acosh, asinh, atanh, atan2,
         cbrt, typemax, typemin, unsafe_trunc, realmin, realmax, get_rounding,
-        set_rounding, maxintfloat, widen, significand, frexp, tryparse
+        set_rounding, maxintfloat, widen, significand, frexp, tryparse,
+        parse, big
 
 import Base.Rounding: get_rounding_raw, set_rounding_raw
 
@@ -51,10 +52,12 @@ type BigFloat <: AbstractFloat
     exp::Clong
     d::Ptr{Culong}
 
-    function BigFloat(; prec = -1)
-        # sentinel value -1: use current global precision
-        if prec == -1
+    function BigFloat(; prec::Integer = -1)  # keyword argument prec
+        # sentinel value -1: if set, then use current global precision
+        if prec < 0
             prec = get_bigfloat_precision()
+        elseif prec < 2
+            throw(ArgumentError("Minimum allowed BigFloat precision is 2"))
         end
 
         z = new(zero(Clong), zero(Cint), zero(Clong), C_NULL)
@@ -75,35 +78,65 @@ widen(::Type{BigFloat}) = BigFloat
 
 convert(::Type{BigFloat}, x::BigFloat) = x
 
-# convert to BigFloat
+# constructors:
 for (fJ, fC) in ((:si,:Clong), (:ui,:Culong), (:d,:Float64))
     @eval begin
-        function BigFloat(x::($fC), prec=-1)
-            z = BigFloat(; prec=prec)
+        function BigFloat(x::($fC), prec::Integer=-1)
+            z = BigFloat(prec=prec)
             ccall(($(string(:mpfr_set_,fJ)), :libmpfr), Int32, (Ptr{BigFloat}, ($fC), Int32), &z, x, ROUNDING_MODE[end])
             return z
         end
     end
 end
 
-function BigFloat(x::BigInt, prec=-1)
+function BigFloat(x::BigInt, prec::Integer=-1)
     z = BigFloat(prec=prec)
     ccall((:mpfr_set_z, :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigInt}, Int32), &z, &x, ROUNDING_MODE[end])
     return z
 end
 
-BigFloat(x::Integer, prec=-1) = BigFloat(BigInt(x), prec)
+BigFloat(x::Integer, prec::Integer=-1) = BigFloat(BigInt(x), prec)
 
-BigFloat(x::Union{Bool,Int8,Int16,Int32}, prec=-1) = BigFloat(convert(Clong,x), prec)
-BigFloat(x::Union{UInt8,UInt16,UInt32}, prec=-1) = BigFloat(convert(Culong,x), prec)
+BigFloat(x::Union{Bool,Int8,Int16,Int32}, prec::Integer=-1) = BigFloat(convert(Clong,x), prec)
+BigFloat(x::Union{UInt8,UInt16,UInt32}, prec::Integer=-1) = BigFloat(convert(Culong,x), prec)
 
-BigFloat(x::Union{Float16,Float32}, prec=-1) = BigFloat(Float64(x), prec)
-BigFloat(x::Rational, prec=-1) = BigFloat(num(x), prec) / BigFloat(den(x), prec)
+BigFloat(x::Union{Float16,Float32}, prec::Integer=-1) = BigFloat(Float64(x), prec)
+function BigFloat(x::Rational, prec::Integer=-1)
+    with_bigfloat_precision(prec) do
+        BigFloat(num(x), prec) / BigFloat(den(x), prec)
+    end
+end
 
+# convert methods use current global precision:
+for T in (:Clong, :Culong, :Float64, :BigInt, :Integer, :Bool,
+            :Int8, :Int16, :Int32, :UInt8, :UInt16, :UInt32,
+            :Float16, :Float32, :Rational)
+
+            @eval convert(::Type{BigFloat}, x::$T) = BigFloat(x)
+end
+
+# parse strings:
 function tryparse(::Type{BigFloat}, s::AbstractString, base::Int=0)
     z = BigFloat()
     err = ccall((:mpfr_set_str, :libmpfr), Int32, (Ptr{BigFloat}, Cstring, Int32, Int32), &z, s, base, ROUNDING_MODE[end])
     err == 0 ? Nullable(z) : Nullable{BigFloat}()
+end
+
+
+# base is a keyword argument for parse
+function parse(::Type{BigFloat}, s::AbstractString, prec::Integer=-1; base=10)
+    if prec < 0
+        prec = get_bigfloat_precision()
+    elseif prec < 2
+        throw(ArgumentError("Minimum allowed BigFloat precision is 2"))
+    end
+
+    z = BigFloat(prec=prec)
+    err = ccall((:mpfr_set_str, :libmpfr), Int32, (Ptr{BigFloat}, Cstring, Int32, Int32), &z, s, base, ROUNDING_MODE[end])
+    if err != 0
+        throw(ArgumentError("Incorrect string for parsing to BigFloat in base $base"))
+    end
+    return z
 end
 
 convert(::Type{Rational}, x::BigFloat) = convert(Rational{BigInt}, x)
@@ -695,7 +728,7 @@ end
 get_bigfloat_precision() = DEFAULT_PRECISION[end]
 function set_bigfloat_precision(x::Int)
     if x < 2
-        throw(DomainError())
+        throw(ArgumentError("Minimum allowed BigFloat precision is 2"))
     end
     DEFAULT_PRECISION[end] = x
 end
@@ -862,6 +895,8 @@ get_emin_max() = ccall((:mpfr_get_emin_max, :libmpfr), Clong, ())
 set_emax!(x) = ccall((:mpfr_set_emax, :libmpfr), Void, (Clong,), x)
 set_emin!(x) = ccall((:mpfr_set_emin, :libmpfr), Void, (Clong,), x)
 
-big(x, prec) = BigFloat(x, prec)
+
+big(x, prec::Integer) = BigFloat(x, prec)
+big(x::AbstractString, prec::Integer) = parse(BigFloat, x, prec)
 
 end #module
