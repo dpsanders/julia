@@ -76,28 +76,35 @@ macro irrational(sym, val, def)
     esym = esc(sym)
     qsym = esc(Expr(:quote, sym))
     bigconvert = isa(def,Symbol) ? quote
-        function Base.convert(::Type{BigFloat}, ::Irrational{$qsym})
-            c = BigFloat()
+        function BigFloat(::Irrational{$qsym}, prec=-1)
+        #function Base.convert(::Type{BigFloat}, ::Irrational{$qsym})
+            c = BigFloat(prec=prec)
             ccall(($(string("mpfr_const_", def)), :libmpfr),
                   Cint, (Ptr{BigFloat}, Int32),
                   &c, MPFR.ROUNDING_MODE[end])
             return c
         end
+
+        #Base.convert(::Type{BigFloat}, ::Irrational{$qsym}) = BigFloat($sym)
     end : quote
-        Base.convert(::Type{BigFloat}, ::Irrational{$qsym}) = $(esc(def))
+        #Base.convert(::Type{BigFloat}, ::Irrational{$qsym}) = $(esc(def))
+        BigFloat(::Irrational{$qsym}, prec=-1) = $(esc(def))
     end
     quote
         const $esym = Irrational{$qsym}()
         $bigconvert
         Base.convert(::Type{Float64}, ::Irrational{$qsym}) = $val
         Base.convert(::Type{Float32}, ::Irrational{$qsym}) = $(Float32(val))
+        Base.convert(::Type{BigFloat}, ::Irrational{$qsym}) = $(BigFloat($esym))
+
         @assert isa(big($esym), BigFloat)
         @assert Float64($esym) == Float64(big($esym))
         @assert Float32($esym) == Float32(big($esym))
     end
 end
 
-big(x::Irrational) = convert(BigFloat,x)
+
+#big(x::Irrational) = convert(BigFloat,x)
 
 ## specific irriational mathematical constants
 

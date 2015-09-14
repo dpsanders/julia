@@ -76,7 +76,14 @@ end
 widen(::Type{Float64}) = BigFloat
 widen(::Type{BigFloat}) = BigFloat
 
-convert(::Type{BigFloat}, x::BigFloat) = x
+# change precision of BigFloat:
+function BigFloat(x::BigFloat, prec::Integer=-1)
+    z = BigFloat(prec=prec)
+    ccall((:mpfr_set, :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigFloat}, Int32), &z, x, ROUNDING_MODE[end])
+    return z
+end
+
+convert(::Type{BigFloat}, x::BigFloat) = BigFloat(x)
 
 # constructors:
 for (fJ, fC) in ((:si,:Clong), (:ui,:Culong), (:d,:Float64))
@@ -101,19 +108,15 @@ BigFloat(x::Union{Bool,Int8,Int16,Int32}, prec::Integer=-1) = BigFloat(convert(C
 BigFloat(x::Union{UInt8,UInt16,UInt32}, prec::Integer=-1) = BigFloat(convert(Culong,x), prec)
 
 BigFloat(x::Union{Float16,Float32}, prec::Integer=-1) = BigFloat(Float64(x), prec)
-function BigFloat(x::Rational, prec::Integer=-1)
-    with_bigfloat_precision(prec) do
-        BigFloat(num(x), prec) / BigFloat(den(x), prec)
-    end
-end
+BigFloat(x::Rational, prec::Integer=-1) = BigFloat(BigFloat(num(x), prec) / BigFloat(den(x), prec), prec)
 
 # convert methods use current global precision:
-for T in (:Clong, :Culong, :Float64, :BigInt, :Integer, :Bool,
-            :Int8, :Int16, :Int32, :UInt8, :UInt16, :UInt32,
-            :Float16, :Float32, :Rational)
-
-            @eval convert(::Type{BigFloat}, x::$T) = BigFloat(x)
-end
+# for T in (:Clong, :Culong, :Float64, :BigInt, :Integer, :Bool,
+#             :Int8, :Int16, :Int32, :UInt8, :UInt16, :UInt32,
+#             :Float16, :Float32, :Rational)
+#
+#             @eval convert(::Type{BigFloat}, x::$T) = BigFloat(x)
+# end
 
 # parse strings:
 function tryparse(::Type{BigFloat}, s::AbstractString, base::Int=0)
@@ -829,8 +832,8 @@ end
 
 isfinite(x::BigFloat) = !isinf(x) && !isnan(x)
 
-@eval typemax(::Type{BigFloat}) = $(BigFloat( Inf))
-@eval typemin(::Type{BigFloat}) = $(BigFloat(-Inf))
+typemax(::Type{BigFloat}) = BigFloat( Inf)
+typemin(::Type{BigFloat}) = BigFloat(-Inf)
 
 function nextfloat(x::BigFloat)
     z = BigFloat()
