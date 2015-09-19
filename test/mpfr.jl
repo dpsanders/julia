@@ -864,6 +864,7 @@ end
 
 @test isnan(sqrt(BigFloat(NaN)))
 
+<<<<<<< HEAD
 # test constructors and `big` with additional precision and rounding mode:
 
 for prec in (10, 100, 1000)
@@ -883,3 +884,22 @@ b = BigFloat(3.1, 100)
 
 
 @test_throws ArgumentError eps(nextfloat(BigFloat(0.0)))
+
+# tests for big
+for prec in (10, 100, 1000)
+    with_bigfloat_precision(prec) do
+
+        a = big("3.1", RoundDown)
+        b = big("3.1", RoundUp)
+
+        @test b - a == eps(a)
+    end
+
+    a = big("3.1", prec, RoundDown)
+    b = big("3.1", prec, RoundUp)
+
+    @test b - a = big(eps(a), prec)
+
+end
+
+@test big(3.5, RoundDown) == big(3.5, RoundUp) == 3.5
