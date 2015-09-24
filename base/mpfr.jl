@@ -483,11 +483,14 @@ end
 
 for f in (:exp, :exp2, :exp10, :expm1, :digamma, :erf, :erfc, :zeta,
           :cosh,:sinh,:tanh,:sech,:csch,:coth, :cbrt)
-    @eval function $f(x::BigFloat)
-        z = BigFloat()
-        ccall(($(string(:mpfr_,f)), :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigFloat}, Int32), &z, &x, ROUNDING_MODE[end])
+    @eval function $f(x::BigFloat, r::Cint=get_rounding(BigFloat))
+        z = BigFloat(prec=precision(x))
+        ccall(($(string(:mpfr_,f)), :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigFloat}, Int32), &z, &x, r)
         return z
     end
+
+    @eval $f(x::BigFloat, r::RoundingMode) = $f(x, to_mpfr(r))
+
 end
 
 # return log(2)
@@ -643,20 +646,22 @@ function sum(arr::AbstractArray{BigFloat})
 end
 
 # Functions for which NaN results are converted to DomainError, following Base
-for f in (:sin,:cos,:tan,:sec,:csc,
-          :acos,:asin,:atan,:acosh,:asinh,:atanh, :gamma)
+for f in (:sin, :cos, :tan, :sec, :csc,
+          :acos, :asin, :atan, :acosh, :asinh, :atanh, :gamma)
     @eval begin
-        function ($f)(x::BigFloat)
+        function ($f)(x::BigFloat, r::Cint=get_rounding(BigFloat))
             if isnan(x)
                 return x
             end
-            z = BigFloat()
-            ccall(($(string(:mpfr_,f)), :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigFloat}, Int32), &z, &x, ROUNDING_MODE[end])
+            z = BigFloat(prec=precision(x))
+            ccall(($(string(:mpfr_,f)), :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigFloat}, Int32), &z, &x, r)
             if isnan(z)
                 throw(DomainError())
             end
             return z
         end
+
+        ($f)(x::BigFloat, r::RoundingMode) = ($f)(x::BigFloat, to_mpfr(r))
     end
 end
 
