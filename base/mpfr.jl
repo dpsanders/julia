@@ -22,7 +22,7 @@ import
         cosh, sinh, tanh, sech, csch, coth, acosh, asinh, atanh, atan2,
         cbrt, typemax, typemin, unsafe_trunc, realmin, realmax, get_rounding,
         set_rounding, maxintfloat, widen, significand, frexp, tryparse,
-        big
+        big, deepcopy
 
 import Base.Rounding: get_rounding_raw, set_rounding_raw
 
@@ -837,22 +837,26 @@ isfinite(x::BigFloat) = !isinf(x) && !isnan(x)
 @eval typemax(::Type{BigFloat}) = $(BigFloat( Inf))
 @eval typemin(::Type{BigFloat}) = $(BigFloat(-Inf))
 
-function nextfloat(x::BigFloat)
+function deepcopy(x::BigFloat)
     z = BigFloat(prec=precision(x))
     ccall((:mpfr_set, :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigFloat}, Int32), &z, &x, ROUNDING_MODE[end])
+    z
+end
+
+function nextfloat(x::BigFloat)
+    z = deepcopy(x)
     ccall((:mpfr_nextabove, :libmpfr), Void, (Ptr{BigFloat},), &z) # modifies z
     return z
 end
 
 function prevfloat(x::BigFloat)
-    z = BigFloat(prec=precision(x))
-    ccall((:mpfr_set, :libmpfr), Int32, (Ptr{BigFloat}, Ptr{BigFloat}, Int32), &z, &x, ROUNDING_MODE[end])
+    z = deepcopy(x)
     ccall((:mpfr_nextbelow, :libmpfr), Void, (Ptr{BigFloat},), &z) # modifies z
     return z
 end
 
 function eps(x::BigFloat)
-    BigFloat(nextfloat(x) - x, prec=precision(x))
+    distance = BigFloat(nextfloat(x) - x, precision(x))
     distance == big(0.0) && throw(ArgumentError("eps not defined for tiny numbers"))
     return distance
 end
