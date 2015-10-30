@@ -863,3 +863,5 @@ let b = IOBuffer()
 end
 
 @test isnan(sqrt(BigFloat(NaN)))
+
+@test string(BigFloat(Inf)) == "Inf"
