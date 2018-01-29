@@ -418,6 +418,10 @@ function inv(w::ComplexF64)
     return ComplexF64(p*s,q*s) # undo scaling
 end
 
+"""
+Calculate the sum of squares of `x` and `y`.
+Returns the sum of squares `ρ` and, if necessary, a power of two by which to shift to avoid over- and under-flow.
+"""
 function ssqs(x::T, y::T) where T<:AbstractFloat
     k::Int = 0
     ρ = x*x + y*y
